@@ -34,7 +34,8 @@ export const extractBase64Data = (dataUrl: string) => {
  */
 export const generateStoryboardPlan = async (
   productImageBase64: string,
-  language: string
+  language: string,
+  additionalPrompt?: string
 ): Promise<StoryboardCampaign> => {
   // Initialize inside function to ensure we use the latest API key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -98,13 +99,17 @@ export const generateStoryboardPlan = async (
     required: ["shots", "seo", "tts_instructions"]
   };
 
+  const userPrompt = additionalPrompt 
+    ? `Create a 12-shot fashion B-roll storyboard campaign based on this product. Important Requirement: ${additionalPrompt}`
+    : "Create a 12-shot fashion B-roll storyboard campaign based on this product.";
+
   try {
     const response = await ai.models.generateContent({
       model,
       contents: {
         parts: [
           { inlineData: { mimeType, data } },
-          { text: "Create a 12-shot fashion B-roll storyboard campaign based on this product." }
+          { text: userPrompt }
         ]
       },
       config: {
@@ -165,66 +170,147 @@ export const generateShotImage = async (
 };
 
 /**
- * Image Editor: Edit an image using a text prompt.
+ * Image Editor: Edit an image using a text prompt, producing 8 angles/poses.
+ * Returns an array of objects containing the image URL and the corresponding video generation prompt JSON.
  */
 export const editImage = async (
   imageBase64: string,
   prompt: string,
   aspectRatio: string,
-  supportingImageBase64?: string | null,
+  faceImageBase64?: string | null,
   backgroundImageBase64?: string | null
-): Promise<string> => {
+): Promise<{ imageUrl: string; videoPrompt: any }[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const parts: any[] = [];
-  const mainImg = extractBase64Data(imageBase64);
-  parts.push({
-    inlineData: {
-      data: mainImg.data,
-      mimeType: mainImg.mimeType,
+  // Define 8 distinct pose and angle combinations
+  // Also map them to cinematic camera movements for the video prompt
+  const variations = [
+    { 
+      angle: "Front View", 
+      pose: "Standing confidently with hands naturally by sides",
+      cameraMovement: "Static shot with subtle motion"
     },
-  });
-
-  if (supportingImageBase64) {
-    const suppImg = extractBase64Data(supportingImageBase64);
-    parts.push({
-      inlineData: {
-        data: suppImg.data,
-        mimeType: suppImg.mimeType,
-      },
-    });
-  }
-
-  if (backgroundImageBase64) {
-    const bgImg = extractBase64Data(backgroundImageBase64);
-    parts.push({
-      inlineData: {
-        data: bgImg.data,
-        mimeType: bgImg.mimeType,
-      },
-    });
-  }
-
-  parts.push({ text: prompt });
-  
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts: parts },
-      config: {
-        imageConfig: { aspectRatio: aspectRatio }
-      }
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-      }
+    { 
+      angle: "Right Profile (Side View)", 
+      pose: "Walking motion with a dynamic stride",
+      cameraMovement: "Truck Left following the subject"
+    },
+    { 
+      angle: "Left Profile (Side View)", 
+      pose: "Standing candidly, looking slightly away",
+      cameraMovement: "Truck Right following the subject"
+    },
+    { 
+      angle: "Three-Quarter Left", 
+      pose: "Relaxed pose, shifting weight to one leg, hand in pocket or on hip",
+      cameraMovement: "Slow Arc Right"
+    },
+    { 
+      angle: "Three-Quarter Right", 
+      pose: "Dynamic fashion pose, interacting with outfit or accessory",
+      cameraMovement: "Slow Arc Left"
+    },
+    { 
+      angle: "High Angle", 
+      pose: "Sitting or looking up towards the camera",
+      cameraMovement: "Boom Down / Crane Down"
+    },
+    { 
+      angle: "Low Angle", 
+      pose: "Strong power pose, looking down at the camera",
+      cameraMovement: "Boom Up / Crane Up"
+    },
+    { 
+      angle: "Close-up Face", 
+      pose: "Detailed facial expression, engaging with the camera, hands near face",
+      cameraMovement: "Slow Zoom In"
     }
-    throw new Error("No image generated from edit.");
+  ];
+
+  const generateSingleVariation = async (variation: { angle: string, pose: string, cameraMovement: string }): Promise<{ imageUrl: string; videoPrompt: any } | null> => {
+      const parts: any[] = [];
+      const mainImg = extractBase64Data(imageBase64);
+      
+      parts.push({
+        inlineData: {
+          data: mainImg.data,
+          mimeType: mainImg.mimeType,
+        },
+      });
+
+      if (faceImageBase64) {
+        const faceImg = extractBase64Data(faceImageBase64);
+        parts.push({
+          inlineData: {
+            data: faceImg.data,
+            mimeType: faceImg.mimeType,
+          },
+        });
+      }
+
+      if (backgroundImageBase64) {
+        const bgImg = extractBase64Data(backgroundImageBase64);
+        parts.push({
+          inlineData: {
+            data: bgImg.data,
+            mimeType: bgImg.mimeType,
+          },
+        });
+      }
+
+      // Construct prompt to emphasize pose change and face swap
+      let fullPrompt = `${prompt}. 
+      View/Camera Angle: ${variation.angle}. 
+      Pose Action: ${variation.pose}.
+      IMPORTANT: Change the body pose to match the description.`;
+
+      if (faceImageBase64) {
+          fullPrompt += " FACE SWAP REQUIRED: Replace the face of the subject in the main image with the face provided in the reference image. The resulting face MUST match the identity of the reference image, but keep the outfit and general scene from the main image.";
+      }
+
+      parts.push({ text: fullPrompt });
+      
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: { parts: parts },
+          config: {
+            imageConfig: { aspectRatio: aspectRatio }
+          }
+        });
+
+        let imageUrl = "";
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData) {
+            imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+
+        if (imageUrl) {
+            // Construct the JSON prompt for video generation
+            const videoPrompt = {
+                prompt: `Fashion video. ${prompt}. ${variation.pose}. ${variation.angle}.`,
+                camera_movement: variation.cameraMovement,
+                negative_prompt: "distortion, blurry, low quality, deformed, ugly"
+            };
+            return { imageUrl, videoPrompt };
+        }
+        return null; // Fail silently for this variation
+      } catch (error) {
+        console.error(`Error generating variation ${variation.angle}:`, error);
+        return null;
+      }
+  };
+
+  try {
+      // Execute all 8 requests in parallel
+      const results = await Promise.all(variations.map(v => generateSingleVariation(v)));
+      // Filter out nulls
+      return results.filter((res): res is { imageUrl: string; videoPrompt: any } => res !== null);
   } catch (error) {
-    console.error("Error editing image:", error);
-    throw error;
+      console.error("Error in batch generation:", error);
+      throw error;
   }
 };
 
@@ -290,7 +376,7 @@ export const generateSpeech = async (
               prebuiltVoiceConfig: { voiceName: voice },
             },
         },
-        temperature: temperature
+        // Temperature omitted as it causes errors with the current TTS model version
       },
     });
 

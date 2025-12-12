@@ -128,6 +128,15 @@ const InputPanel: React.FC<InputPanelProps> = ({ inputState, setInputState, onGe
                     <option value="English">English</option>
                 </select>
              </div>
+             <div>
+                <label className="block text-xs text-gray-500 mb-1">Prompt Tambahan (Opsional)</label>
+                <textarea 
+                    value={inputState.additionalPrompt || ''}
+                    onChange={(e) => setInputState(prev => ({...prev, additionalPrompt: e.target.value}))}
+                    placeholder="Contoh: Buat suasana sinematik dan gelap..."
+                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white h-20 resize-none"
+                />
+             </div>
          </div>
       </div>
 

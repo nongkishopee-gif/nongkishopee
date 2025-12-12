@@ -33,6 +33,7 @@ export interface InputState {
   backgroundImage: string | null;
   orientation: 'Portrait (9:16)' | 'Landscape (16:9)' | 'Square (1:1)';
   language: 'Bahasa Indonesia' | 'English' | 'Bahasa Malaysia';
+  additionalPrompt: string;
 }
 
 export type ViewState = 'storyboard' | 'image-editor' | 'text-to-speech';

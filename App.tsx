@@ -17,7 +17,8 @@ const App: React.FC = () => {
     modelImage: null,
     backgroundImage: null,
     orientation: 'Portrait (9:16)',
-    language: 'Bahasa Indonesia'
+    language: 'Bahasa Indonesia',
+    additionalPrompt: ''
   });
 
   const [shots, setShots] = useState<GeneratedShot[]>([]);
@@ -35,7 +36,11 @@ const App: React.FC = () => {
 
     try {
       // 1. Generate the textual plan (JSON prompts + SEO + TTS)
-      const campaignData = await generateStoryboardPlan(inputState.productImage, inputState.language);
+      const campaignData = await generateStoryboardPlan(
+        inputState.productImage, 
+        inputState.language,
+        inputState.additionalPrompt
+      );
       setCampaign(campaignData);
       
       // Initialize shots with loading state for images

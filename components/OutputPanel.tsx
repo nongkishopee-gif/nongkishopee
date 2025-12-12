@@ -9,6 +9,7 @@ interface OutputPanelProps {
 
 const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated }) => {
   const [selectedPrompt, setSelectedPrompt] = useState<any | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   
   // Script State
   const [scriptText, setScriptText] = useState('');
@@ -60,14 +61,24 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
             </div>
             
             {/* Visual Representation */}
-            <div className="aspect-[9/16] w-full bg-gray-100 rounded-xl overflow-hidden mb-4 relative">
+            <div className="aspect-[9/16] w-full bg-gray-100 rounded-xl overflow-hidden mb-4 relative group cursor-pointer">
               {shot.isLoadingImage ? (
                  <div className="absolute inset-0 flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
                  </div>
               ) : (
                 shot.imageUrl ? (
-                    <img src={shot.imageUrl} alt={shot.title} className="w-full h-full object-cover" />
+                    <>
+                      <img 
+                        src={shot.imageUrl} 
+                        alt={shot.title} 
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                        onClick={() => setPreviewImage(shot.imageUrl!)}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                        <svg className="w-8 h-8 text-white drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                      </div>
+                    </>
                 ) : (
                     <div className="flex items-center justify-center h-full text-xs text-gray-400">Image generation failed</div>
                 )
@@ -196,10 +207,10 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
         </div>
       </div>
 
-      {/* JSON Viewer Modal (Simplified inline for now) */}
+      {/* JSON Viewer Modal */}
       {selectedPrompt && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-fade-in-up">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center">
                     <h3 className="font-bold text-gray-900">Video Generation Prompt</h3>
                     <button onClick={() => setSelectedPrompt(null)} className="text-gray-500 hover:text-gray-700">
@@ -220,6 +231,29 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
                         Copy JSON
                     </button>
                 </div>
+            </div>
+        </div>
+      )}
+
+      {/* Lightbox Preview Modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
+          onClick={() => setPreviewImage(null)}
+        >
+            <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center">
+                <img 
+                  src={previewImage} 
+                  alt="Preview" 
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                  onClick={(e) => e.stopPropagation()} 
+                />
+                <button 
+                  onClick={() => setPreviewImage(null)}
+                  className="absolute top-0 right-0 m-4 text-white hover:text-gray-300 bg-black/50 rounded-full p-2 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
             </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 {
-  "name": "EngagePro Clone - AI Storyboard",
+  "name": "Keprokan AI Storyboard",
   "description": "A fashion B-roll storyboard generator that creates visual shots and corresponding video generation JSON prompts using Gemini.",
   "requestFramePermissions": []
 }

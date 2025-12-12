@@ -285,7 +285,7 @@ const TextToSpeech: React.FC = () => {
                     {/* Temperature */}
                     <div>
                          <div className="flex justify-between items-center mb-2">
-                             <label className="block text-sm font-bold text-gray-800">Variability</label>
+                             <label className="block text-sm font-bold text-gray-800">Temperature</label>
                              <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">{temperature.toFixed(1)}</span>
                          </div>
                          <input 
