@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { GeneratedShot, StoryboardCampaign } from '../types';
 
@@ -24,6 +25,23 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  /**
+   * Transforms the internal prompt structure to the official Google Veo 3.1 JSON format
+   * Removed aspectRatio as requested.
+   */
+  const formatVeoPrompt = (shot: GeneratedShot) => {
+    return {
+      model: "veo-3.1-generate-preview",
+      prompt: shot.video_generation_prompt.prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: "1080p",
+        camera_movement: shot.video_generation_prompt.camera_movement,
+        negative_prompt: shot.video_generation_prompt.negative_prompt
+      }
+    };
   };
 
   if (!hasGenerated && shots.length === 0) {
@@ -87,12 +105,15 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
 
             <div className="mt-auto">
                 <button 
-                    onClick={() => setSelectedPrompt(shot.video_generation_prompt)}
-                    className="w-full text-left bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 rounded-lg p-3 group transition-colors"
+                    onClick={() => setSelectedPrompt(formatVeoPrompt(shot))}
+                    className="w-full text-left bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg p-3 group transition-colors"
                 >
                     <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-indigo-700">View Video Prompt (JSON)</span>
-                        <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        <div className="flex flex-col">
+                           <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Google Veo 3.1</span>
+                           <span className="text-xs font-bold text-white">Gen-Video Prompt (JSON)</span>
+                        </div>
+                        <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                 </button>
             </div>
@@ -207,27 +228,52 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
         </div>
       </div>
 
-      {/* JSON Viewer Modal */}
+      {/* JSON Viewer Modal - Updated for Google Veo 3.1 Context */}
       {selectedPrompt && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col animate-fade-in-up">
-                <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-900">Video Generation Prompt</h3>
-                    <button onClick={() => setSelectedPrompt(null)} className="text-gray-500 hover:text-gray-700">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-scale-in">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-900 text-white">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg leading-tight">Google Veo 3.1 Prompt</h3>
+                            <p className="text-xs text-slate-400">Video Generation Configuration</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setSelectedPrompt(null)} className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-800 rounded-full">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
-                <div className="p-6 overflow-y-auto bg-slate-900 text-slate-300 font-mono text-sm">
+                
+                <div className="bg-slate-50 p-4 border-b border-slate-200">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
+                        <svg className="w-3 h-3 mr-1 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"></path></svg>
+                        How to use
+                    </p>
+                    <p className="text-[11px] text-slate-600 mt-1">Copy this JSON and paste it into the Gemini API endpoint or use the prompt text directly in the Video Generator tool.</p>
+                </div>
+
+                <div className="p-6 overflow-y-auto bg-slate-900 text-indigo-300 font-mono text-xs leading-relaxed">
                     <pre className="whitespace-pre-wrap">{JSON.stringify(selectedPrompt, null, 2)}</pre>
                 </div>
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+
+                <div className="p-4 border-t border-gray-100 bg-white flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setSelectedPrompt(null)}
+                        className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                        Close
+                    </button>
                     <button 
                         onClick={() => {
                             copyToClipboard(JSON.stringify(selectedPrompt, null, 2));
-                            setSelectedPrompt(null);
+                            alert("Copied to clipboard!");
                         }}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+                        className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all transform active:scale-95 flex items-center"
                     >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
                         Copy JSON
                     </button>
                 </div>
@@ -245,12 +291,12 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ campaign, shots, hasGenerated
                 <img 
                   src={previewImage} 
                   alt="Preview" 
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl border-4 border-white/10"
                   onClick={(e) => e.stopPropagation()} 
                 />
                 <button 
                   onClick={() => setPreviewImage(null)}
-                  className="absolute top-0 right-0 m-4 text-white hover:text-gray-300 bg-black/50 rounded-full p-2 transition-colors"
+                  className="absolute top-0 right-0 m-4 text-white hover:text-gray-300 bg-black/50 rounded-full p-2 transition-colors border border-white/20"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>

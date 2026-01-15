@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import InputPanel from './components/InputPanel';
@@ -14,8 +15,10 @@ const App: React.FC = () => {
   // Storyboard State
   const [inputState, setInputState] = useState<InputState>({
     productImage: null,
-    modelImage: null,
+    faceImage: null,
     backgroundImage: null,
+    productDescription: '',
+    selectedColor: null, // Initialize new field
     orientation: 'Portrait (9:16)',
     language: 'Bahasa Indonesia',
     additionalPrompt: ''
@@ -35,35 +38,35 @@ const App: React.FC = () => {
     setCampaign(null);
 
     try {
-      // 1. Generate the textual plan (JSON prompts + SEO + TTS)
+      // 1. Generate the textual plan using analyzed description and selected color
       const campaignData = await generateStoryboardPlan(
         inputState.productImage, 
         inputState.language,
+        inputState.productDescription,
+        inputState.selectedColor, // Pass color
         inputState.additionalPrompt
       );
       setCampaign(campaignData);
       
-      // Initialize shots with loading state for images
       const initialShots: GeneratedShot[] = campaignData.shots.map(shot => ({
         ...shot,
         isLoadingImage: true
       }));
       setShots(initialShots);
 
-      // Extract raw aspect ratio from UI string (e.g. "Portrait (9:16)" -> "9:16")
       let aspectRatio = "1:1";
       if (inputState.orientation.includes('9:16')) aspectRatio = "9:16";
       else if (inputState.orientation.includes('16:9')) aspectRatio = "16:9";
-      else if (inputState.orientation.includes('3:4')) aspectRatio = "3:4";
-      else if (inputState.orientation.includes('4:3')) aspectRatio = "4:3";
 
-      // 2. Trigger Image Generation for each shot in parallel
+      // 2. Trigger Image Generation for each shot in parallel with grounding
       campaignData.shots.forEach(async (shot) => {
         try {
           const imageUrl = await generateShotImage(
             shot.visual_description, 
             inputState.productImage!, 
-            aspectRatio
+            aspectRatio,
+            inputState.faceImage,
+            inputState.backgroundImage
           );
           
           setShots(prev => prev.map(s => 
@@ -72,7 +75,6 @@ const App: React.FC = () => {
               : s
           ));
         } catch (err) {
-            console.error(`Failed to generate image for shot ${shot.shot_number}`, err);
              setShots(prev => prev.map(s => 
                 s.shot_number === shot.shot_number 
                 ? { ...s, isLoadingImage: false } 
@@ -83,7 +85,7 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Generation failed", error);
-      alert("Failed to generate storyboard. Please try again.");
+      alert("Gagal membuat storyboard. Mohon coba lagi.");
     } finally {
       setIsGenerating(false);
     }
@@ -123,7 +125,6 @@ const App: React.FC = () => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
             </button>
         </div>
-
         {renderContent()}
       </div>
     </div>

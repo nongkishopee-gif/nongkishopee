@@ -1,63 +1,93 @@
+
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { StoryboardShot, StoryboardCampaign } from "../types";
 
 /**
  * Helper to strip the Data URL prefix from base64 strings
- * because the Gemini API expects raw base64.
- * 
- * Uses string splitting instead of regex to handle large strings safely.
  */
 export const extractBase64Data = (dataUrl: string) => {
-  // Check if it's a data URL
   if (dataUrl.startsWith('data:')) {
     const splitIndex = dataUrl.indexOf(',');
     if (splitIndex !== -1) {
       const metadata = dataUrl.substring(0, splitIndex);
       const data = dataUrl.substring(splitIndex + 1);
-      
-      // Extract mime type from "data:image/jpeg;base64"
-      // metadata example: "data:image/png;base64"
       const mimeTypeMatch = metadata.match(/:(.*?);/);
       const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-      
       return { mimeType, data };
     }
   }
-  
-  // Fallback for raw base64 or unexpected formats
   return { mimeType: "image/jpeg", data: dataUrl };
 };
 
 /**
- * Step 1: Analyze the product image and generate a textual storyboard plan.
- * This returns the JSON structure for the video prompts, SEO, and TTS instructions.
+ * Analyze the product image to provide a grounding description.
+ */
+export const analyzeProductImage = async (productImageBase64: string, language: string, selectedColor: string | null): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = "gemini-3-flash-preview";
+  const { mimeType, data } = extractBase64Data(productImageBase64);
+
+  const colorContext = selectedColor ? `Preference: The product should primarily be ${selectedColor}.` : "";
+
+  const prompt = `Analyze this fashion product image carefully. 
+  Describe exactly what it is (e.g., "A long-sleeved floral silk dress"). 
+  ${colorContext}
+  Include material, patterns, and style. 
+  Keep the description concise but highly specific (1-2 sentences). 
+  
+  CRITICAL: You MUST write this description in ${language}.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { inlineData: { mimeType, data } },
+          { text: prompt }
+        ]
+      }
+    });
+    return response.text || "";
+  } catch (error) {
+    console.error("Analysis failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Step 1: Generate a textual storyboard plan.
+ * Strengthened instructions for highly detailed video generation prompts optimized for Google Veo 3.1.
  */
 export const generateStoryboardPlan = async (
   productImageBase64: string,
   language: string,
+  productDescription: string,
+  selectedColor: string | null,
   additionalPrompt?: string
 ): Promise<StoryboardCampaign> => {
-  // Initialize inside function to ensure we use the latest API key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = "gemini-2.5-flash";
-  
+  const model = "gemini-3-pro-preview"; 
   const { mimeType, data } = extractBase64Data(productImageBase64);
 
-  const systemInstruction = `You are an expert Fashion Director and Video Producer. 
-  Your task is to analyze a product image and create a comprehensive B-Roll video marketing campaign.
+  const colorRule = selectedColor ? `The product MUST be rendered in ${selectedColor}.` : "";
+
+  const systemInstruction = `You are a world-class Fashion Creative Director and Video AI Prompt Engineer for Google Veo 3.1. 
+  Your task is to create a 12-shot B-Roll storyboard for: "${productDescription}".
+  ${colorRule}
   
-  The output must be a JSON object containing:
-  1. 'shots': A 12-shot visual storyboard.
-  2. 'seo': Video title, engaging description, and relevant hashtags.
-  3. 'tts_instructions': A guide for the voice actor on how to deliver the script (tone, pace, emotion).
+  CRITICAL VIDEO PROMPT ENGINEERING (For Google Veo 3.1):
+  1. AUDIO FOCUS: The 'video_generation_prompt.prompt' MUST specify that the audio is NATURALLY SPOKEN VOICEOVER or DIALOGUE. Explicitly forbid background music or singing in the prompt text. Use phrases like "natural human speech", "clear vocal delivery", "strictly no background music".
+  2. REALISM: Use keywords like "ultra-realistic", "hyper-photorealistic", "8k resolution", "highly detailed skin textures", "physically accurate fabric physics".
+  3. LIGHTING & CAMERA: Describe "cinematic lighting", "soft rim light", "85mm lens", "Arri Alexa look".
+  4. NO ASPECT RATIO: Do NOT include mentions of "9:16", "16:9", or "Vertical/Horizontal" in the prompt text itself, as the UI handles this.
+  5. NO LAPTOPS/OFFICE: Forbidden items.
+
+  Output a JSON object with:
+  - 'shots': 12 shots with Title, Visual Description, Voiceover, and Video Prompt.
+  - 'seo': Title, Description, Hashtags.
+  - 'tts_instructions': Performance guide.
   
-  For each shot, provide:
-  - Title
-  - Visual Description (detailed enough to generate a static image representation).
-  - Voiceover Text (A short, engaging script for a narrator or text-to-speech engine).
-  - Video Generation Prompt (A specific JSON object optimized for a video generation AI).
-  
-  Language requirement: ${language}.
+  Language: ${language}.
   `;
 
   const schema: Schema = {
@@ -71,15 +101,15 @@ export const generateStoryboardPlan = async (
             shot_number: { type: Type.INTEGER },
             title: { type: Type.STRING },
             visual_description: { type: Type.STRING },
-            voiceover_text: { type: Type.STRING, description: "Script for text-to-speech" },
+            voiceover_text: { type: Type.STRING },
             video_generation_prompt: {
               type: Type.OBJECT,
               properties: {
-                prompt: { type: Type.STRING, description: "The core prompt for video generation" },
-                negative_prompt: { type: Type.STRING, description: "Elements to avoid" },
-                camera_movement: { type: Type.STRING, description: "e.g., Pan Right, Zoom In, Static" }
+                prompt: { type: Type.STRING },
+                negative_prompt: { type: Type.STRING },
+                camera_movement: { type: Type.STRING }
               },
-              required: ["prompt", "camera_movement"]
+              required: ["prompt", "camera_movement", "negative_prompt"]
             }
           },
           required: ["shot_number", "title", "visual_description", "voiceover_text", "video_generation_prompt"]
@@ -90,18 +120,18 @@ export const generateStoryboardPlan = async (
         properties: {
           title: { type: Type.STRING },
           description: { type: Type.STRING },
-          hashtags: { type: Type.STRING, description: "Space separated hashtags" }
+          hashtags: { type: Type.STRING }
         },
         required: ["title", "description", "hashtags"]
       },
-      tts_instructions: { type: Type.STRING, description: "Instructions for the voice style and tone" }
+      tts_instructions: { type: Type.STRING }
     },
     required: ["shots", "seo", "tts_instructions"]
   };
 
   const userPrompt = additionalPrompt 
-    ? `Create a 12-shot fashion B-roll storyboard campaign based on this product. Important Requirement: ${additionalPrompt}`
-    : "Create a 12-shot fashion B-roll storyboard campaign based on this product.";
+    ? `Create a 12-shot campaign. Product: ${productDescription}. ${selectedColor ? `Color: ${selectedColor}.` : ''} Extra Context: ${additionalPrompt}`
+    : `Create a 12-shot campaign for this product: ${productDescription}. ${selectedColor ? `Color: ${selectedColor}.` : ''}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -135,25 +165,42 @@ export const generateStoryboardPlan = async (
 export const generateShotImage = async (
   visualDescription: string,
   productImageBase64: string,
-  aspectRatio: string = "9:16"
+  aspectRatio: string = "9:16",
+  faceImageBase64?: string | null,
+  backgroundImageBase64?: string | null
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const { mimeType, data } = extractBase64Data(productImageBase64);
   const model = "gemini-2.5-flash-image"; 
+  const productImg = extractBase64Data(productImageBase64);
+  
+  const parts: any[] = [
+    { inlineData: { mimeType: productImg.mimeType, data: productImg.data } }
+  ];
+
+  let prompt = `MANDATORY PRODUCT IDENTITY: Generate a photorealistic image of the EXACT product shown in the first reference image. 
+  Scenario: ${visualDescription}. 
+  Quality: High-end editorial, sharp focus, 8k resolution, realistic textures.`;
+
+  if (faceImageBase64) {
+    const faceImg = extractBase64Data(faceImageBase64);
+    parts.push({ inlineData: { mimeType: faceImg.mimeType, data: faceImg.data } });
+    prompt += " FACE SWAP: Use the exact facial features from the second image.";
+  }
+
+  if (backgroundImageBase64) {
+    const bgImg = extractBase64Data(backgroundImageBase64);
+    parts.push({ inlineData: { mimeType: bgImg.mimeType, data: bgImg.data } });
+    prompt += " ENVIRONMENT: Place in the specific environment/lighting shown in the third image.";
+  }
+
+  parts.push({ text: prompt });
 
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType, data } },
-          { text: `Create a photorealistic fashion storyboard shot: ${visualDescription}. Ensure the product looks similar to the reference image provided.` }
-        ]
-      },
+      contents: { parts },
       config: {
-        imageConfig: {
-          aspectRatio: aspectRatio
-        }
+        imageConfig: { aspectRatio: aspectRatio as any }
       }
     });
 
@@ -170,153 +217,87 @@ export const generateShotImage = async (
 };
 
 /**
- * Image Editor: Edit an image using a text prompt, producing 8 angles/poses.
- * Returns an array of objects containing the image URL and the corresponding video generation prompt JSON.
+ * Image Editor: Edit an image producing 8 angles/poses.
+ * Improved video generation prompts for Veo 3.1 with Speech focus and NO aspect ratio mentions.
  */
 export const editImage = async (
   imageBase64: string,
   prompt: string,
   aspectRatio: string,
   faceImageBase64?: string | null,
-  backgroundImageBase64?: string | null
+  backgroundImageBase64?: string | null,
+  selectedColor?: string | null
 ): Promise<{ imageUrl: string; videoPrompt: any }[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Define 8 distinct pose and angle combinations
-  // Also map them to cinematic camera movements for the video prompt
   const variations = [
-    { 
-      angle: "Front View", 
-      pose: "Standing confidently with hands naturally by sides",
-      cameraMovement: "Static shot with subtle motion"
-    },
-    { 
-      angle: "Right Profile (Side View)", 
-      pose: "Walking motion with a dynamic stride",
-      cameraMovement: "Truck Left following the subject"
-    },
-    { 
-      angle: "Left Profile (Side View)", 
-      pose: "Standing candidly, looking slightly away",
-      cameraMovement: "Truck Right following the subject"
-    },
-    { 
-      angle: "Three-Quarter Left", 
-      pose: "Relaxed pose, shifting weight to one leg, hand in pocket or on hip",
-      cameraMovement: "Slow Arc Right"
-    },
-    { 
-      angle: "Three-Quarter Right", 
-      pose: "Dynamic fashion pose, interacting with outfit or accessory",
-      cameraMovement: "Slow Arc Left"
-    },
-    { 
-      angle: "High Angle", 
-      pose: "Sitting or looking up towards the camera",
-      cameraMovement: "Boom Down / Crane Down"
-    },
-    { 
-      angle: "Low Angle", 
-      pose: "Strong power pose, looking down at the camera",
-      cameraMovement: "Boom Up / Crane Up"
-    },
-    { 
-      angle: "Close-up Face", 
-      pose: "Detailed facial expression, engaging with the camera, hands near face",
-      cameraMovement: "Slow Zoom In"
-    }
+    { angle: "Front View", pose: "Standing confidently", cameraMovement: "Static" },
+    { angle: "Right Profile", pose: "Walking motion", cameraMovement: "Truck Left" },
+    { angle: "Left Profile", pose: "Looking away", cameraMovement: "Truck Right" },
+    { angle: "Three-Quarter Left", pose: "Relaxed pose", cameraMovement: "Slow Arc Right" },
+    { angle: "Three-Quarter Right", pose: "Interacting with accessory", cameraMovement: "Slow Arc Left" },
+    { angle: "High Angle", pose: "Looking up", cameraMovement: "Boom Down" },
+    { angle: "Low Angle", pose: "Power pose", cameraMovement: "Boom Up" },
+    { angle: "Close-up Face", pose: "Engaging facial expression", cameraMovement: "Slow Zoom In" }
   ];
 
-  const generateSingleVariation = async (variation: { angle: string, pose: string, cameraMovement: string }): Promise<{ imageUrl: string; videoPrompt: any } | null> => {
+  const generateSingleVariation = async (variation: typeof variations[0]) => {
       const parts: any[] = [];
       const mainImg = extractBase64Data(imageBase64);
-      
-      parts.push({
-        inlineData: {
-          data: mainImg.data,
-          mimeType: mainImg.mimeType,
-        },
-      });
+      parts.push({ inlineData: { data: mainImg.data, mimeType: mainImg.mimeType } });
 
       if (faceImageBase64) {
         const faceImg = extractBase64Data(faceImageBase64);
-        parts.push({
-          inlineData: {
-            data: faceImg.data,
-            mimeType: faceImg.mimeType,
-          },
-        });
+        parts.push({ inlineData: { data: faceImg.data, mimeType: faceImg.mimeType } });
       }
 
       if (backgroundImageBase64) {
         const bgImg = extractBase64Data(backgroundImageBase64);
-        parts.push({
-          inlineData: {
-            data: bgImg.data,
-            mimeType: bgImg.mimeType,
-          },
-        });
+        parts.push({ inlineData: { data: bgImg.data, mimeType: bgImg.mimeType } });
       }
 
-      // Construct prompt to emphasize pose change and face swap
-      let fullPrompt = `${prompt}. 
-      View/Camera Angle: ${variation.angle}. 
-      Pose Action: ${variation.pose}.
-      IMPORTANT: Change the body pose to match the description.`;
-
-      if (faceImageBase64) {
-          fullPrompt += " FACE SWAP REQUIRED: Replace the face of the subject in the main image with the face provided in the reference image. The resulting face MUST match the identity of the reference image, but keep the outfit and general scene from the main image.";
-      }
+      let fullPrompt = `STRICT PRODUCT PRESERVATION: Generate the same subject from the main image in a new pose: ${variation.pose}. Angle: ${variation.angle}. Color: ${selectedColor || 'original'}. Ultra-realistic detail.`;
+      
+      if (prompt) fullPrompt += ` Instruction: ${prompt}.`;
+      if (faceImageBase64) fullPrompt += " Use the face from reference.";
 
       parts.push({ text: fullPrompt });
       
       try {
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
-          contents: { parts: parts },
-          config: {
-            imageConfig: { aspectRatio: aspectRatio }
-          }
+          contents: { parts },
+          config: { imageConfig: { aspectRatio: aspectRatio as any } }
         });
 
-        let imageUrl = "";
         for (const part of response.candidates?.[0]?.content?.parts || []) {
           if (part.inlineData) {
-            imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-            break;
+            const videoPromptText = `Hyper-realistic 8k fashion video for Google Veo 3.1. The subject is a professional model in ${selectedColor || 'clothing'} performing a ${variation.pose} at a ${variation.angle}. AUDIO: Crisp, natural human voiceover narration, strictly no music or singing. VISUALS: Deep cinematic bokeh, 85mm lens, highly detailed fabric textures, natural skin pores, Arri Alexa color science. No distortions, no text, no aspect ratio mentions.`;
+            
+            return { 
+                imageUrl: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+                videoPrompt: {
+                    model: "veo-3.1-generate-preview",
+                    prompt: videoPromptText,
+                    config: {
+                        camera_movement: variation.cameraMovement,
+                        negative_prompt: "music, background music, singing, distorted anatomy, blurry, low resolution, watermark, text, signature, grainy, low quality, 3d render, cartoon, flicker, aspect ratio bars",
+                        resolution: "1080p"
+                    }
+                }
+            };
           }
         }
-
-        if (imageUrl) {
-            // Construct the JSON prompt for video generation
-            const videoPrompt = {
-                prompt: `Fashion video. ${prompt}. ${variation.pose}. ${variation.angle}.`,
-                camera_movement: variation.cameraMovement,
-                negative_prompt: "distortion, blurry, low quality, deformed, ugly"
-            };
-            return { imageUrl, videoPrompt };
-        }
-        return null; // Fail silently for this variation
+        return null;
       } catch (error) {
-        console.error(`Error generating variation ${variation.angle}:`, error);
         return null;
       }
   };
 
-  try {
-      // Execute all 8 requests in parallel
-      const results = await Promise.all(variations.map(v => generateSingleVariation(v)));
-      // Filter out nulls
-      return results.filter((res): res is { imageUrl: string; videoPrompt: any } => res !== null);
-  } catch (error) {
-      console.error("Error in batch generation:", error);
-      throw error;
-  }
+  const results = await Promise.all(variations.map(v => generateSingleVariation(v)));
+  return results.filter((res): res is { imageUrl: string; videoPrompt: any } => res !== null);
 };
 
-/**
- * Generate a video using Veo model.
- */
 export const generateVeoVideo = async (
   imageBase64: string,
   prompt: string,
@@ -328,15 +309,8 @@ export const generateVeoVideo = async (
   let operation = await ai.models.generateVideos({
     model: 'veo-3.1-fast-generate-preview',
     prompt: prompt,
-    image: {
-      imageBytes: data,
-      mimeType: mimeType,
-    },
-    config: {
-      numberOfVideos: 1,
-      resolution: '720p',
-      aspectRatio: aspectRatio
-    }
+    image: { imageBytes: data, mimeType: mimeType },
+    config: { numberOfVideos: 1, resolution: '720p', aspectRatio: aspectRatio }
   });
 
   while (!operation.done) {
@@ -346,14 +320,13 @@ export const generateVeoVideo = async (
 
   const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
   if (!downloadLink) throw new Error("No video link returned.");
-
   const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 };
 
 /**
- * Generate Speech using Gemini TTS
+ * Generates speech from text.
  */
 export const generateSpeech = async (
     text: string, 
@@ -362,30 +335,21 @@ export const generateSpeech = async (
     temperature?: number
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   const promptText = instruction ? `${instruction}: ${text}` : text;
-
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: promptText }] }],
       config: {
         responseModalities: [Modality.AUDIO],
-        speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voice },
-            },
-        },
-        // Temperature omitted as it causes errors with the current TTS model version
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        temperature: temperature,
       },
     });
-
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) throw new Error("No audio generated");
-    
     return base64Audio;
   } catch (error) {
-    console.error("TTS Error:", error);
     throw error;
   }
 };

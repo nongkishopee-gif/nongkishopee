@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { editImage } from '../services/geminiService';
 
@@ -6,10 +7,34 @@ interface EditedResult {
     videoPrompt: any;
 }
 
+const COLORS = [
+    { name: 'TURQOISE', hex: '#40E0D0' },
+    { name: 'MAROON', hex: '#800000' },
+    { name: 'MAGENTA', hex: '#FF00FF' },
+    { name: 'CREAMY', hex: '#FFFDD0', border: true },
+    { name: 'MINT GREEN', hex: '#98FF98', border: true },
+    { name: 'DARK GREY', hex: '#A9A9A9' },
+    { name: 'NUDE', hex: '#E3BC9A' },
+    { name: 'DARK CHOCOLATE', hex: '#3D1C02' },
+    { name: 'BLACK', hex: '#000000' },
+    { name: 'LIGHT GREY', hex: '#D3D3D3', border: true },
+    { name: 'APPLE GREEN', hex: '#8DB600' },
+    { name: 'WHITE', hex: '#FFFFFF', border: true },
+    { name: 'PLUM', hex: '#8E4585' },
+    { name: 'LIGHT PINK', hex: '#FFB6C1', border: true },
+    { name: 'PURPLE SWEET', hex: '#A45EE5' },
+    { name: 'DARK BLUE', hex: '#00008B' },
+    { name: 'PINK BELACAN', hex: '#B56576' },
+    { name: 'EMERALD GREEN', hex: '#50C878' },
+    { name: 'LIGHT BLUE', hex: '#ADD8E6', border: true },
+    { name: 'ROYALE BLUE', hex: '#4169E1' },
+];
+
 const ImageEditor: React.FC = () => {
   const [image, setImage] = useState<string | null>(null);
   const [faceImage, setFaceImage] = useState<string | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   
   // Drag states
   const [dragMain, setDragMain] = useState(false);
@@ -78,13 +103,13 @@ const ImageEditor: React.FC = () => {
   };
 
   const handleEdit = async () => {
-    if (!image || !prompt) return;
+    if (!image) return;
 
     setIsGenerating(true);
     setEditedImages([]); // Clear previous results
     try {
-      // Expect array of objects back
-      const results = await editImage(image, prompt, aspectRatio, faceImage, backgroundImage);
+      // Prompt and color are now both handled, one or both or neither can be provided
+      const results = await editImage(image, prompt, aspectRatio, faceImage, backgroundImage, selectedColor);
       setEditedImages(results);
     } catch (error) {
       console.error("Editing failed", error);
@@ -94,8 +119,8 @@ const ImageEditor: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const selectColor = (colorName: string) => {
+    setSelectedColor(prev => prev === colorName ? null : colorName);
   };
 
   return (
@@ -202,15 +227,47 @@ const ImageEditor: React.FC = () => {
                 )}
               </div>
 
+              {/* Clothing Color Selection */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-3">Pilih Warna Pakaian (Opsional)</label>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-y-3 gap-x-2">
+                    {COLORS.map((color) => (
+                        <button
+                            key={color.name}
+                            onClick={() => selectColor(color.name)}
+                            className={`group flex flex-col items-center space-y-1 transition-all ${
+                                selectedColor === color.name ? 'scale-105' : 'opacity-70 hover:opacity-100'
+                            }`}
+                        >
+                            <div 
+                                className={`w-8 h-8 rounded-full shadow-sm relative transition-all ${
+                                    selectedColor === color.name ? 'ring-2 ring-indigo-500 ring-offset-2' : ''
+                                } ${color.border ? 'border border-gray-200' : ''}`}
+                                style={{ backgroundColor: color.hex }}
+                            >
+                                {selectedColor === color.name && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <svg className={`w-3.5 h-3.5 ${['WHITE', 'CREAMY', 'MINT GREEN', 'LIGHT GREY', 'LIGHT PINK', 'LIGHT BLUE', 'NUDE'].includes(color.name) ? 'text-gray-800' : 'text-white'}`} fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+                            <span className={`text-[7px] font-bold text-center leading-tight uppercase ${selectedColor === color.name ? 'text-indigo-600' : 'text-gray-500'}`}>{color.name}</span>
+                        </button>
+                    ))}
+                </div>
+              </div>
+
               {/* Configuration */}
               <div className="space-y-4">
                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Edit Instruction</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Edit Instruction (Optional)</label>
                     <textarea 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="e.g. Change the dress to red, add a retro filter..."
-                        className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none"
+                        placeholder="e.g. add a retro filter, change style to cinematic..."
+                        className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none"
                     />
                  </div>
                  
@@ -231,9 +288,9 @@ const ImageEditor: React.FC = () => {
 
                  <button
                     onClick={handleEdit}
-                    disabled={!image || !prompt || isGenerating}
+                    disabled={!image || isGenerating}
                     className={`w-full py-3.5 rounded-xl text-white font-bold shadow-lg transition-all flex items-center justify-center space-x-2 ${
-                        !image || !prompt || isGenerating
+                        !image || isGenerating
                         ? 'bg-indigo-300 cursor-not-allowed'
                         : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-300 transform hover:-translate-y-0.5'
                     }`}

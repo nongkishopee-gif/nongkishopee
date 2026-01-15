@@ -1,3 +1,4 @@
+
 export interface StoryboardShot {
   shot_number: number;
   title: string;
@@ -29,8 +30,10 @@ export interface StoryboardCampaign {
 
 export interface InputState {
   productImage: string | null;
-  modelImage: string | null;
+  faceImage: string | null;
   backgroundImage: string | null;
+  productDescription: string;
+  selectedColor: string | null; // New field for optional clothing color
   orientation: 'Portrait (9:16)' | 'Landscape (16:9)' | 'Square (1:1)';
   language: 'Bahasa Indonesia' | 'English' | 'Bahasa Malaysia';
   additionalPrompt: string;
